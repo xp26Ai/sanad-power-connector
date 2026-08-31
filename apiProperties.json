@@ -1,0 +1,44 @@
+{
+  "properties": {
+    "connectionParameters": {
+      "api_key": {
+        "type": "securestring",
+        "uiDefinition": {
+          "displayName": "Sanad token",
+          "description": "The value of SANAD_TOKEN on the Sanad server, written as the word Bearer, one space, then the token.",
+          "tooltip": "Example shape: Bearer followed by a space and your token",
+          "constraints": {
+            "tabIndex": 2,
+            "clearText": false,
+            "required": "true"
+          }
+        }
+      },
+      "gateway": {
+        "type": "gatewaySetting",
+        "gatewaySettings": {
+          "dataSourceType": "CustomConnector",
+          "connectionDetails": []
+        },
+        "uiDefinition": {
+          "displayName": "On-premises data gateway",
+          "description": "Select the gateway installed on a machine that can reach the Sanad server.",
+          "constraints": {
+            "tabIndex": 3,
+            "required": "false",
+            "capability": [
+              "gateway"
+            ]
+          }
+        }
+      }
+    },
+    "iconBrandColor": "#0B5FA5",
+    "capabilities": [
+      "actions"
+    ],
+    "publisher": "Osaid Ahmad",
+    "stackOwner": "Osaid Ahmad",
+    "policyTemplateInstances": []
+  }
+}

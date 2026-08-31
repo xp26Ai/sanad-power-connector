@@ -1,0 +1,694 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Sanad Support Bot",
+    "description": "Ask the Sanad internal support bot a question and get a human-approved answer with a match score, or an explicit \"I do not know\" that is queued for a trainer. Sanad never lets a language model write the user-facing reply.",
+    "version": "1.0",
+    "contact": {
+      "name": "Osaid Ahmad",
+      "url": "https://github.com/defeat11/sanad"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/defeat11/sanad-power-connector/blob/main/LICENSE"
+    }
+  },
+  "host": "sanad.contoso.local",
+  "basePath": "/api",
+  "schemes": [
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/chat": {
+      "post": {
+        "operationId": "AskSanad",
+        "summary": "Ask Sanad a question",
+        "description": "Sends one question to Sanad and returns the approved answer, a set of suggestions, or an explicit unknown. Arabic and English are both accepted.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ChatRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sanad answered the question.",
+            "schema": {
+              "$ref": "#/definitions/ChatResponse"
+            }
+          },
+          "400": {
+            "description": "The session or the text field is missing.",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          },
+          "429": {
+            "description": "This session sent more than 20 questions in one minute.",
+            "schema": {
+              "$ref": "#/definitions/RateLimitResponse"
+            }
+          },
+          "500": {
+            "description": "Sanad failed to process the question.",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/feedback": {
+      "post": {
+        "operationId": "RateAnswer",
+        "summary": "Rate an answer",
+        "description": "Records one vote on an answer that Sanad already returned. A negative vote sends the original question back to the trainer queue.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/FeedbackRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The vote was recorded.",
+            "schema": {
+              "$ref": "#/definitions/FeedbackResponse"
+            }
+          },
+          "400": {
+            "description": "The chat id is missing, or the vote is not 1 or -1.",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Sanad failed to record the vote.",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/queue": {
+      "get": {
+        "operationId": "ListPendingQuestions",
+        "summary": "List questions waiting for a trainer",
+        "description": "Returns every pending question, grouped so that near duplicate questions arrive as one item with its variants attached.",
+        "x-ms-visibility": "advanced",
+        "responses": {
+          "200": {
+            "description": "The list of pending question groups.",
+            "schema": {
+              "$ref": "#/definitions/QueueClusterList"
+            }
+          },
+          "401": {
+            "description": "The Authorization header is missing or the token is wrong.",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Sanad failed to read the queue.",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/stats": {
+      "get": {
+        "operationId": "GetStats",
+        "summary": "Get knowledge base statistics",
+        "description": "Returns counters for the answer base, the pending queue, the instant answer rate, and satisfaction. Useful for a scheduled report.",
+        "x-ms-visibility": "advanced",
+        "responses": {
+          "200": {
+            "description": "The current statistics.",
+            "schema": {
+              "$ref": "#/definitions/StatsResponse"
+            }
+          },
+          "401": {
+            "description": "The Authorization header is missing or the token is wrong.",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Sanad failed to read the statistics.",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "ChatRequest": {
+      "type": "object",
+      "required": [
+        "session",
+        "text"
+      ],
+      "properties": {
+        "session": {
+          "type": "string",
+          "description": "A stable identifier for the conversation. Sanad rate limits each session to 20 questions per minute.",
+          "title": "Session",
+          "x-ms-summary": "Session",
+          "example": "teams-osaid-ahmad"
+        },
+        "text": {
+          "type": "string",
+          "description": "The question exactly as the employee wrote it. Arabic or English.",
+          "title": "Question",
+          "x-ms-summary": "Question",
+          "example": "كيف أغير كلمة المرور؟"
+        }
+      }
+    },
+    "ChatResponse": {
+      "type": "object",
+      "properties": {
+        "reply": {
+          "type": "string",
+          "description": "The text to show the employee. Always present.",
+          "title": "Reply",
+          "x-ms-summary": "Reply",
+          "example": "افتح صفحة الخدمة الذاتية، ثم اختر تغيير كلمة المرور، وأدخل الرمز الذي يصلك."
+        },
+        "matched": {
+          "$ref": "#/definitions/MatchedAnswer"
+        },
+        "suggestions": {
+          "type": "array",
+          "description": "Answer titles offered when the match was uncertain. Null when Sanad was sure or had nothing.",
+          "title": "Suggestions",
+          "x-ms-summary": "Suggestions",
+          "items": {
+            "type": "string"
+          },
+          "example": [
+            "الطابعة لا تطبع",
+            "الطابعة تطبع صفحات فارغة",
+            "إضافة طابعة جديدة"
+          ]
+        },
+        "queued": {
+          "type": "boolean",
+          "description": "True when Sanad did not know the answer and put the question in the trainer queue.",
+          "title": "Queued",
+          "x-ms-summary": "Queued",
+          "example": false
+        },
+        "chat_id": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The row id of this reply. Pass it to Rate an answer.",
+          "title": "Chat id",
+          "x-ms-summary": "Chat id",
+          "example": 1287
+        }
+      }
+    },
+    "MatchedAnswer": {
+      "type": "object",
+      "description": "The approved answer that Sanad matched. Null when nothing matched.",
+      "title": "Matched answer",
+      "properties": {
+        "answer_id": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The id of the approved answer in the knowledge base.",
+          "title": "Answer id",
+          "x-ms-summary": "Answer id",
+          "example": 42
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the approved answer.",
+          "title": "Answer title",
+          "x-ms-summary": "Answer title",
+          "example": "تغيير كلمة المرور"
+        },
+        "score": {
+          "type": "number",
+          "format": "double",
+          "description": "The match score between 0 and 1. Sanad answers directly at 0.85 and above, and offers suggestions between 0.55 and 0.85.",
+          "title": "Score",
+          "x-ms-summary": "Score",
+          "example": 0.94
+        }
+      }
+    },
+    "FeedbackRequest": {
+      "type": "object",
+      "required": [
+        "chat_id",
+        "vote"
+      ],
+      "properties": {
+        "chat_id": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The chat id returned by Ask Sanad.",
+          "title": "Chat id",
+          "x-ms-summary": "Chat id",
+          "example": 1287
+        },
+        "vote": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Use 1 for a helpful answer, or -1 for an unhelpful one. No other value is accepted.",
+          "title": "Vote",
+          "x-ms-summary": "Vote",
+          "enum": [
+            1,
+            -1
+          ],
+          "example": 1
+        }
+      }
+    },
+    "FeedbackResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "description": "True when the vote was stored.",
+          "title": "Success",
+          "x-ms-summary": "Success",
+          "example": true
+        }
+      }
+    },
+    "QueueClusterList": {
+      "type": "array",
+      "description": "Pending question groups, ordered by priority and then by newest first.",
+      "title": "Pending questions",
+      "items": {
+        "$ref": "#/definitions/QueueCluster"
+      }
+    },
+    "QueueCluster": {
+      "type": "object",
+      "description": "One pending question plus the near duplicates folded into it.",
+      "title": "Pending question group",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The queue row id.",
+          "title": "Queue id",
+          "x-ms-summary": "Queue id",
+          "example": 77
+        },
+        "question_raw": {
+          "type": "string",
+          "description": "The question exactly as the employee typed it.",
+          "title": "Question",
+          "x-ms-summary": "Question",
+          "example": "كم رصيد إجازاتي؟"
+        },
+        "question_norm": {
+          "type": "string",
+          "description": "The normalized form of the question. Diacritics removed and letters unified.",
+          "title": "Normalized question",
+          "x-ms-summary": "Normalized question",
+          "example": "كم رصيد اجازاتي"
+        },
+        "lang": {
+          "type": "string",
+          "description": "The detected language of the question.",
+          "title": "Language",
+          "x-ms-summary": "Language",
+          "example": "ar"
+        },
+        "status": {
+          "type": "string",
+          "description": "The queue state. This operation returns pending rows only.",
+          "title": "Status",
+          "x-ms-summary": "Status",
+          "example": "pending"
+        },
+        "answer_id": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The answer this question was linked to. Null while the question is pending.",
+          "title": "Answer id",
+          "x-ms-summary": "Answer id",
+          "example": 0
+        },
+        "created_at": {
+          "type": "string",
+          "description": "When the question entered the queue.",
+          "title": "Created at",
+          "x-ms-summary": "Created at",
+          "example": "2026-08-31 09:14:02"
+        },
+        "priority": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Set to 1 when the same employee hit an unknown answer twice in a row.",
+          "title": "Priority",
+          "x-ms-summary": "Priority",
+          "example": 1
+        },
+        "similar_questions": {
+          "type": "array",
+          "description": "Other pending questions that scored 0.75 or higher against this one.",
+          "title": "Similar questions",
+          "x-ms-summary": "Similar questions",
+          "items": {
+            "$ref": "#/definitions/QueueItem"
+          }
+        },
+        "variants": {
+          "type": "array",
+          "description": "The raw text of each similar question, as a flat list.",
+          "title": "Variants",
+          "x-ms-summary": "Variants",
+          "items": {
+            "type": "string"
+          },
+          "example": [
+            "وش رصيد الاجازات",
+            "ابغى اعرف رصيد اجازاتي"
+          ]
+        }
+      }
+    },
+    "QueueItem": {
+      "type": "object",
+      "description": "One pending question inside a group.",
+      "title": "Pending question",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The queue row id.",
+          "title": "Queue id",
+          "x-ms-summary": "Queue id",
+          "example": 81
+        },
+        "question_raw": {
+          "type": "string",
+          "description": "The question exactly as the employee typed it.",
+          "title": "Question",
+          "x-ms-summary": "Question",
+          "example": "وش رصيد الاجازات"
+        },
+        "question_norm": {
+          "type": "string",
+          "description": "The normalized form of the question.",
+          "title": "Normalized question",
+          "x-ms-summary": "Normalized question",
+          "example": "وش رصيد الاجازات"
+        },
+        "lang": {
+          "type": "string",
+          "description": "The detected language of the question.",
+          "title": "Language",
+          "x-ms-summary": "Language",
+          "example": "ar"
+        },
+        "status": {
+          "type": "string",
+          "description": "The queue state.",
+          "title": "Status",
+          "x-ms-summary": "Status",
+          "example": "pending"
+        },
+        "answer_id": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The answer this question was linked to. Null while pending.",
+          "title": "Answer id",
+          "x-ms-summary": "Answer id",
+          "example": 0
+        },
+        "created_at": {
+          "type": "string",
+          "description": "When the question entered the queue.",
+          "title": "Created at",
+          "x-ms-summary": "Created at",
+          "example": "2026-08-31 09:31:44"
+        },
+        "priority": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The escalation flag for this row.",
+          "title": "Priority",
+          "x-ms-summary": "Priority",
+          "example": 0
+        }
+      }
+    },
+    "StatsResponse": {
+      "type": "object",
+      "properties": {
+        "answers": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many approved answers exist.",
+          "title": "Answers",
+          "x-ms-summary": "Answers",
+          "example": 128
+        },
+        "variants": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many question phrasings point at those answers.",
+          "title": "Variants",
+          "x-ms-summary": "Variants",
+          "example": 640
+        },
+        "queue_pending": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many questions wait for a trainer.",
+          "title": "Pending questions",
+          "x-ms-summary": "Pending questions",
+          "example": 9
+        },
+        "chats": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many chat rows are stored, counting both sides.",
+          "title": "Chat rows",
+          "x-ms-summary": "Chat rows",
+          "example": 3140
+        },
+        "skills": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many scripted skills are defined.",
+          "title": "Skills",
+          "x-ms-summary": "Skills",
+          "example": 6
+        },
+        "training_log": {
+          "type": "array",
+          "description": "The last 20 training events, newest first.",
+          "title": "Training log",
+          "x-ms-summary": "Training log",
+          "items": {
+            "$ref": "#/definitions/TrainingLogEntry"
+          }
+        },
+        "total_answered": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many replies were tied to an approved answer.",
+          "title": "Total answered",
+          "x-ms-summary": "Total answered",
+          "example": 1102
+        },
+        "instant_answer_rate": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The percentage of replies in the last 7 days that scored 0.85 or higher.",
+          "title": "Instant answer rate",
+          "x-ms-summary": "Instant answer rate",
+          "example": 71
+        },
+        "user_learned_variants": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many phrasings Sanad learned by itself from real questions.",
+          "title": "Learned variants",
+          "x-ms-summary": "Learned variants",
+          "example": 214
+        },
+        "avg_exam_score": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The average score of the last exam run, as a percentage. Null when no exam has run.",
+          "title": "Average exam score",
+          "x-ms-summary": "Average exam score",
+          "example": 88
+        },
+        "overall_satisfaction": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The percentage of votes that were positive. Returns 100 when no vote exists yet.",
+          "title": "Satisfaction",
+          "x-ms-summary": "Satisfaction",
+          "example": 92
+        },
+        "embeddings_count": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many phrasings have a stored vector.",
+          "title": "Embeddings",
+          "x-ms-summary": "Embeddings",
+          "example": 640
+        },
+        "brain_jobs_pending": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many background model jobs are still queued.",
+          "title": "Pending model jobs",
+          "x-ms-summary": "Pending model jobs",
+          "example": 2
+        },
+        "brain_cache_count": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many model verdicts are cached.",
+          "title": "Cached verdicts",
+          "x-ms-summary": "Cached verdicts",
+          "example": 57
+        },
+        "pairs_count": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many training pairs are stored.",
+          "title": "Training pairs",
+          "x-ms-summary": "Training pairs",
+          "example": 310
+        }
+      }
+    },
+    "TrainingLogEntry": {
+      "type": "object",
+      "description": "One training event.",
+      "title": "Training event",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The log row id.",
+          "title": "Log id",
+          "x-ms-summary": "Log id",
+          "example": 903
+        },
+        "event": {
+          "type": "string",
+          "description": "The event name, such as variant_learned or paraphrase_added.",
+          "title": "Event",
+          "x-ms-summary": "Event",
+          "example": "variant_learned"
+        },
+        "detail": {
+          "type": "string",
+          "description": "A readable description of the event.",
+          "title": "Detail",
+          "x-ms-summary": "Detail",
+          "example": "Learned variant \"وش رصيد الاجازات\" for answer ID 42"
+        },
+        "created_at": {
+          "type": "string",
+          "description": "When the event happened.",
+          "title": "Created at",
+          "x-ms-summary": "Created at",
+          "example": "2026-08-31 09:31:44"
+        }
+      }
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string",
+          "description": "Why the request failed.",
+          "title": "Error",
+          "x-ms-summary": "Error",
+          "example": "Missing session or text"
+        }
+      }
+    },
+    "RateLimitResponse": {
+      "type": "object",
+      "description": "Returned when one session sends more than 20 questions in a minute. Sanad answers in the user voice rather than with an error object.",
+      "title": "Rate limit reply",
+      "properties": {
+        "reply": {
+          "type": "string",
+          "description": "A friendly slow down message meant to be shown to the employee as is.",
+          "title": "Reply",
+          "x-ms-summary": "Reply",
+          "example": "أعطني نفَساً 😅 أعد المحاولة بعد قليل"
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "api_key": {
+      "type": "apiKey",
+      "in": "header",
+      "name": "Authorization",
+      "description": "The value of the SANAD_TOKEN environment variable, written as the word Bearer, one space, then the token."
+    }
+  },
+  "security": [
+    {
+      "api_key": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Support",
+      "description": "Ask a question and rate the answer."
+    },
+    {
+      "name": "Training",
+      "description": "Read the trainer queue and the knowledge base counters."
+    }
+  ],
+  "x-ms-connector-metadata": [
+    {
+      "propertyName": "Website",
+      "propertyValue": "https://github.com/defeat11/sanad"
+    },
+    {
+      "propertyName": "Privacy policy",
+      "propertyValue": "https://github.com/defeat11/sanad-power-connector/blob/main/README.en.md"
+    },
+    {
+      "propertyName": "Categories",
+      "propertyValue": "IT Operations;Productivity"
+    }
+  ]
+}

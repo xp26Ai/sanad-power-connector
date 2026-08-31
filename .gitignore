@@ -1,0 +1,34 @@
+# ---------- أسرار ----------
+.env
+.env.*
+!.env.example
+*.token
+secrets.json
+settings.json
+
+# ---------- مخرجات paconn ----------
+# paconn download يكتب هنا نسخة الموصل من المستأجر، وقد تحمل معرّفات بيئة
+.paconn/
+downloaded/
+
+# ---------- حزم التصدير ----------
+*.zip
+
+# ---------- أدوات التطوير الداخلية (ACP) ----------
+.acp-sessions/
+.acp-fingerprint.json
+.acp-lessons.md
+.acp-map.md
+.acp-images/
+
+# ---------- ملفات سكراتش ----------
+scratch/
+*.log
+
+# ---------- نظام التشغيل والمحرر ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
